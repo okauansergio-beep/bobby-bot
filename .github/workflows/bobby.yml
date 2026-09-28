@@ -1,0 +1,40 @@
+name: Bobby Bot
+on:
+  schedule:
+    - cron: "0 15 * * *"
+    - cron: "0 23 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: Repor fila
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python bobby_bot.py manter
+      - name: Salvar artes
+        run: |
+          git config user.name "bobby-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet || git commit -m "novas artes"
+          git push
+      - name: Postar no Instagram
+        env:
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          IG_TOKEN: ${{ secrets.IG_TOKEN }}
+        run: python bobby_bot.py postar
+      - name: Salvar status
+        run: |
+          git add -A
+          git diff --cached --quiet || git commit -m "status"
+          git push
