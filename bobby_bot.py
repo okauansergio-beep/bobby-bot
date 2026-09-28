@@ -89,8 +89,8 @@ def render(post):
         pose = pose.resize((int(pose.width * esc), int(pose.height * esc)))
         img.paste(pose, ((W - pose.width) // 2, H - pose.height), pose)
     d.text((W / 2 - 110, H - 40), "@bobbycapivara.astro", font=fonte(26), fill="#F5C518")
-    caminho = ARTES / f"{post['id']}.png"
-    img.save(caminho)
+    caminho = ARTES / f"{post['id']}.jpg"
+    img.save(caminho, quality=95)
     return caminho
 
 
@@ -113,7 +113,7 @@ def postar():
         return
     repo = os.environ["GITHUB_REPOSITORY"]
     branch = os.getenv("GITHUB_REF_NAME", "main")
-    img_url = f"https://raw.githubusercontent.com/{repo}/{branch}/artes/{prox['id']}.png"
+    img_url = f"https://raw.githubusercontent.com/{repo}/{branch}/artes/{prox['id']}.jpg"
     ig, tok = os.environ["IG_USER_ID"], os.environ["IG_TOKEN"]
     api = "https://graph.facebook.com/v21.0"
     r = requests.post(f"{api}/{ig}/media", data={"image_url": img_url,
