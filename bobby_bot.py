@@ -1,11 +1,15 @@
 """Bobby Bot: ideias -> artes -> postagem no Instagram. Tudo gratuito."""
-import os, sys, json, random, time, pathlib
+import os, sys, json, random, time, pathlib, base64, io
 import requests
 from PIL import Image, ImageDraw, ImageFont
 
 ROOT = pathlib.Path(__file__).parent
 FILA = ROOT / "fila.json"
 POSES = ROOT / "bobby_poses"
+REFS = ROOT / "referencias"
+CONTEXTOS = ROOT / "contextos.txt"
+NEGATIVOS = ROOT / "negativos.txt"
+GEMINI_IMG_MODEL = os.getenv("GEMINI_IMG_MODEL", "gemini-3.1-flash-image")
 ARTES = ROOT / "artes"
 W, H = 1080, 1350
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite")
@@ -71,23 +75,70 @@ def quebra(draw, texto, f, largura):
     linhas.append(atual)
     return linhas
 
+def gerar_cena(contexto):
+    """Gera uma cena nova do Bobby a partir de referencias + contexto, via Gemini."""
+    refs = [p for p in REFS.iterdir() if p.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp")]
+    if not refs:
+        return None
+    escolhidas = random.sample(refs, k=min(3, len(refs)))
+    partes = []
+    negativo = NEGATIVOS.read_text(encoding="utf-8").strip() if NEGATIVOS.exists() else ""
+    prompt = f"""Use as imagens anexadas como referencia EXATA do personagem Bobby Capivara:
+mesmo rosto, monoculo dourado com corrente, gravata com simbolo do Bitcoin, estilo de arte
+(line art preto e branco e dourado, ou fotografia dramatica em preto e branco, dependendo da referencia).
 
+Gere uma cena NOVA, mantendo o personagem identico, no seguinte contexto:
+{contexto}
+
+Formato vertical 1080x1350 (proporcao 4:5), estilo para post de Instagram, alta qualidade,
+composicao com espaco livre na parte de cima ou de baixo para inserir texto depois.
+
+EVITE: {negativo}"""
+    partes.append({"text": prompt})
+    for ref in escolhidas:
+        b64 = base64.b64encode(ref.read_bytes()).decode()
+        mime = "image/png" if ref.suffix.lower() == ".png" else "image/jpeg"
+        partes.append({"inline_data": {"mime_type": mime, "data": b64}})
+
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_IMG_MODEL}:generateContent"
+    r = requests.post(url, params={"key": os.environ["GEMINI_API_KEY"]},
+                       json={"contents": [{"parts": partes}]}, timeout=120)
+    if not r.ok:
+        print("Erro ao gerar cena:", r.text[:300])
+        return None
+    data = r.json()
+    for parte in data["candidates"][0]["content"]["parts"]:
+        if "inlineData" in parte:
+            img_bytes = base64.b64decode(parte["inlineData"]["data"])
+            return Image.open(io.BytesIO(img_bytes)).convert("RGBA")
+    return None
 def render(post):
-    img = Image.new("RGB", (W, H), "black")
+    cena = None
+    if CONTEXTOS.exists():
+        linhas = [l.strip() for l in CONTEXTOS.read_text(encoding="utf-8").splitlines() if l.strip()]
+        if linhas:
+            contexto = random.choice(linhas)
+            cena = gerar_cena(contexto)
+
+    if cena:
+        img = cena.resize((W, H)).convert("RGB")
+    else:
+        img = Image.new("RGB", (W, H), "black")
+        poses = [p for p in POSES.iterdir() if p.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp")]
+        if poses:
+            pose = Image.open(random.choice(poses)).convert("RGBA")
+            esc = min(W / pose.width, H / pose.height)
+            pose = pose.resize((int(pose.width * esc), int(pose.height * esc)))
+            img.paste(pose, ((W - pose.width) // 2, H - pose.height), pose)
+
     d = ImageDraw.Draw(img)
-    f = fonte(78)
-    linhas = quebra(d, post["texto"].upper(), f, W - 160)
-    y = 90
-    for l in linhas:
-        d.text(((W - d.textlength(l, font=f)) / 2, y), l, font=f, fill="white")
-        y += 96
-    poses = [p for p in POSES.iterdir() if p.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp")]
-    if poses:
-        pose = Image.open(random.choice(poses)).convert("RGBA")
-        alvo_h = H - y - 40
-        esc = min(W / pose.width, alvo_h / pose.height)
-        pose = pose.resize((int(pose.width * esc), int(pose.height * esc)))
-        img.paste(pose, ((W - pose.width) // 2, H - pose.height), pose)
+    f = fonte(70)
+    linhas_txt = quebra(d, post["texto"].upper(), f, W - 160)
+    y = 60
+    for l in linhas_txt:
+        d.text(((W - d.textlength(l, font=f)) / 2, y), l, font=f, fill="white",
+               stroke_width=3, stroke_fill="black")
+        y += 88
     d.text((W / 2 - 110, H - 40), "@bobbycapivara.astro", font=fonte(26), fill="#F5C518")
     caminho = ARTES / f"{post['id']}.jpg"
     img.save(caminho, quality=95)
