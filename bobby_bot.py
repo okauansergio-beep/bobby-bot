@@ -100,17 +100,23 @@ EVITE: {negativo}"""
         mime = "image/png" if ref.suffix.lower() == ".png" else "image/jpeg"
         partes.append({"inline_data": {"mime_type": mime, "data": b64}})
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_IMG_MODEL}:generateContent"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_IMG_MODEL}:generateContent"
     r = requests.post(url, params={"key": os.environ["GEMINI_API_KEY"]},
-                       json={"contents": [{"parts": partes}]}, timeout=120)
+                       json={"contents": [{"parts": partes}],
+                             "generationConfig": {"responseModalities": ["IMAGE"]}},
+                       timeout=120)
     if not r.ok:
-        print("Erro ao gerar cena:", r.text[:300])
+        print("ERRO gerar_cena (resposta ruim):", r.text[:500])
         return None
     data = r.json()
-    for parte in data["candidates"][0]["content"]["parts"]:
-        if "inlineData" in parte:
-            img_bytes = base64.b64decode(parte["inlineData"]["data"])
-            return Image.open(io.BytesIO(img_bytes)).convert("RGBA")
+    try:
+        for parte in data["candidates"][0]["content"]["parts"]:
+            if "inlineData" in parte:
+                img_bytes = base64.b64decode(parte["inlineData"]["data"])
+                return Image.open(io.BytesIO(img_bytes)).convert("RGBA")
+    except Exception as e:
+        print("ERRO gerar_cena (sem imagem na resposta):", e, json.dumps(data)[:500])
+    print("ERRO gerar_cena: nenhuma imagem retornada. Resposta:", json.dumps(data)[:500])
     return None
 def render(post):
     cena = None
