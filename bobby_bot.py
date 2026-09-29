@@ -8,7 +8,7 @@ FILA = ROOT / "fila.json"
 POSES = ROOT / "bobby_poses"
 ARTES = ROOT / "artes"
 W, H = 1080, 1350
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite")
 MIN_PRONTOS = 7          # mantém sempre X posts prontos na fila
 LOTE = 14                # quantos gerar quando a fila baixar
 
